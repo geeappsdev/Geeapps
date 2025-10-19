@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+	<title></title>
+	<meta name="generator" content="LibreOffice 25.2.3.2 (Linux)"/>
+	<meta name="created" content="00:00:00"/>
+	<meta name="changed" content="00:00:00"/>
+	<style type="text/css">
+		@page { size: 8.27in 11.69in; margin: 0.79in }
+		p { margin-bottom: 0.1in; line-height: 115%; background: transparent }
+		pre { font-size: 10pt; font-family: "Liberation Mono", monospace; background: transparent }
+	</style>
+</head>
+<body lang="en-US" link="#000080" vlink="#800000" dir="ltr"><pre>&lt;!DOCTYPE html&gt;
+&lt;html lang=&quot;en&quot;&gt;
+&lt;head&gt;
+    &lt;meta charset=&quot;UTF-8&quot;&gt;
+    &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+    &lt;title&gt;GeeClock&lt;/title&gt;
+    &lt;script src=&quot;https://cdn.tailwindcss.com&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js&quot;&gt;&lt;/script&gt;
+    
+    &lt;style&gt;
+        /* Custom font import for better modern look. Now standardized on Inter. */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap');
+        
+        /* --- STATIC DARK THEME DEFINITION --- */
+        :root {
+            --bg-color: #0d1117;        /* Deep Charcoal */
+            --card-bg: #1f2937;         /* Dark Slate */
+            --text-color: #ffffff;      /* White */
+            --sub-text-color: #9ca3af;  /* Gray-400 */
+            --display-bg: #111827;      /* Very Dark Blue-Gray */
+            --input-bg: #374151;        /* Gray-700 */
+            --progress-bar-bg: #4b5563; /* Gray-600 */
+            --reset-bg: #4b5563;        /* Gray-600 */
+            
+            /* Fixed font for all clock displays - Now Inter */
+            --timer-font: 'Inter', sans-serif;
+        }
+        
+        body {
+            font-family: var(--timer-font);
+            background-color: var(--bg-color); 
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        /* Apply the fixed digital font to timer and current time displays */
+        .timer-display, #current-time-display {
+            font-family: var(--timer-font);
+            transition: color 0.3s, background-color 0.3s;
+            /* --- FIX FOR JUMPING NUMBERS (SMOOTH CLOCK) --- */
+            font-variant-numeric: tabular-nums; 
+            font-feature-settings: &quot;tnum&quot;;
+        }
+
+        /* --- MODAL OVERLAY STYLES --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 50;
+            display: none; /* Hidden by default */
+            place-items: center;
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 1rem;
+            max-width: 90vw;
+            width: 400px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            transform: scale(0.95);
+            opacity: 0;
+            transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        /* --- PULSATING ALERT ANIMATION --- */
+        @keyframes pulse-alert {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+                box-shadow: 0 0 30px rgba(255, 0, 0, 0.9);
+            }
+            50% {
+                transform: scale(1.01);
+                opacity: 0.9;
+                box-shadow: 0 0 50px rgba(255, 0, 0, 1.2);
+            }
+        }
+
+        .alert-active {
+            color: #fee2e2 !important; /* light red text */
+            background-color: #dc2626 !important; /* bright red background */
+            font-weight: 900; 
+            animation: pulse-alert 1s infinite alternate; 
+        }
+        
+        /* INCREASED FONT SIZE FOR MAIN DISPLAY and size adjustment */
+        .timer-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* * FONT SIZE ADAPTATION: Uses clamp to ensure the font scales with the viewport (18vw), 
+             * but is capped between a minimum of 3rem (48px) and a maximum of 8rem (128px) 
+             * for ideal legibility on all screen sizes. 
+             */
+            font-size: clamp(3rem, 18vw, 8rem); 
+            font-weight: 900;
+            cursor: pointer; 
+            padding-left: 0.5rem; 
+            padding-right: 0.5rem;
+            min-height: 8rem; /* Set a minimum height to keep the box big */
+        }
+        
+        /* New button styles for square, large, rounded look */
+        .control-button {
+            width: 3.5rem; 
+            height: 3.5rem; 
+            border-radius: 0.75rem; 
+            font-size: 0.875rem; 
+            font-weight: 700; 
+            transition: all 0.15s; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+
+        /* Styling for modal input fields */
+        .time-input-field {
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 2px solid transparent;
+            font-weight: 700;
+            font-size: 1.5rem;
+            padding: 0.5rem 0.25rem;
+            text-align: center;
+            width: 4.5rem; 
+            transition: border-color 0.2s;
+        }
+        .time-input-field:focus {
+            border-color: #4f46e5; /* Indigo */
+            outline: none;
+        }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body class=&quot;min-h-screen p-2 flex items-center justify-center&quot;&gt;
+
+    &lt;div id=&quot;app-container&quot; class=&quot;w-full max-w-xl space-y-3 flex flex-col h-full lg:h-auto relative&quot;&gt; 
+        
+        &lt;header id=&quot;header-section&quot; class=&quot;flex justify-between items-center p-3 rounded-xl shadow-xl&quot;
+                style=&quot;background-color: var(--card-bg); color: var(--text-color);&quot;&gt;
+            &lt;h1 class=&quot;text-xl font-extrabold&quot;&gt;GeeClock&lt;/h1&gt;
+            
+            &lt;div id=&quot;current-time-display&quot; class=&quot;text-sm text-right&quot;&gt;
+                &lt;div class=&quot;flex items-end justify-end leading-none&quot;&gt;
+                    &lt;span id=&quot;time-numbers&quot; class=&quot;font-bold text-xl&quot; style=&quot;color: var(--text-color);&quot;&gt;--:--:--&lt;/span&gt;
+                    &lt;span id=&quot;time-period&quot; class=&quot;text-xs font-semibold ml-1&quot; style=&quot;color: var(--sub-text-color);&quot;&gt;--&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;div id=&quot;current-date&quot; class=&quot;text-xs leading-none&quot; style=&quot;color: var(--sub-text-color);&quot;&gt;---&lt;/div&gt;
+            &lt;/div&gt;
+        &lt;/header&gt;
+        
+        &lt;div id=&quot;timers-container-wrapper&quot; class=&quot;flex-grow flex flex-col justify-start items-center&quot;&gt;
+            &lt;div id=&quot;timers-container&quot; class=&quot;space-y-4 w-full&quot;&gt; 
+                &lt;div id=&quot;loading-message&quot; class=&quot;text-center p-4 rounded-xl&quot; style=&quot;background-color: var(--input-bg); color: var(--text-color);&quot;&gt;Loading clocks...&lt;/div&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+
+        &lt;div class=&quot;flex justify-center pt-6 pb-2&quot;&gt;
+            &lt;button onclick=&quot;addTimer(true)&quot; class=&quot;p-2 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white transition duration-150 shadow-xl hover:shadow-indigo-500/50 transform hover:scale-105&quot;&gt;
+                &lt;svg class=&quot;w-6 h-6&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; viewBox=&quot;0 0 24 24&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;&lt;path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;3&quot; d=&quot;M12 6v6m0 0v6m0-6h6m-6 0H6&quot;&gt;&lt;/path&gt;&lt;/svg&gt;
+            &lt;/button&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+
+    &lt;div id=&quot;setTimeModal&quot; class=&quot;modal-overlay&quot; onclick=&quot;if(event.target.id === 'setTimeModal') hideSetTimeModal()&quot;&gt;
+        &lt;div class=&quot;modal-content space-y-6&quot; onclick=&quot;event.stopPropagation()&quot;&gt;
+            &lt;h2 class=&quot;text-2xl font-bold text-center&quot;&gt;Set Timer Limit&lt;/h2&gt;
+            &lt;p class=&quot;text-center text-sm&quot; style=&quot;color: var(--sub-text-color);&quot;&gt;Set all values to 0 for count-up mode.&lt;/p&gt;
+
+            &lt;div class=&quot;flex justify-center items-center gap-4 text-center&quot;&gt;
+                &lt;div class=&quot;flex flex-col items-center&quot;&gt;
+                    &lt;input type=&quot;number&quot; id=&quot;modal-hr&quot; min=&quot;0&quot; placeholder=&quot;00&quot; class=&quot;time-input-field rounded-lg&quot;&gt;
+                    &lt;span class=&quot;text-xs mt-1&quot; style=&quot;color: var(--sub-text-color);&quot;&gt;Hours&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;div class=&quot;text-2xl font-bold&quot;&gt;:&lt;/div&gt;
+                &lt;div class=&quot;flex flex-col items-center&quot;&gt;
+                    &lt;input type=&quot;number&quot; id=&quot;modal-min&quot; min=&quot;0&quot; max=&quot;59&quot; placeholder=&quot;00&quot; class=&quot;time-input-field rounded-lg&quot;&gt;
+                    &lt;span class=&quot;text-xs mt-1&quot; style=&quot;color: var(--sub-text-color);&quot;&gt;Minutes&lt;/span&gt;
+                &lt;/div&gt;
+                &lt;div class=&quot;text-2xl font-bold&quot;&gt;:&lt;/div&gt;
+                &lt;div class=&quot;flex flex-col items-center&quot;&gt;
+                    &lt;input type=&quot;number&quot; id=&quot;modal-sec&quot; min=&quot;0&quot; max=&quot;59&quot; placeholder=&quot;00&quot; class=&quot;time-input-field rounded-lg&quot;&gt;
+                    &lt;span class=&quot;text-xs mt-1&quot; style=&quot;color: var(--sub-text-color);&quot;&gt;Seconds&lt;/span&gt;
+                &lt;/div&gt;
+            &lt;/div&gt;
+
+            &lt;div class=&quot;flex justify-around pt-4&quot;&gt;
+                &lt;button onclick=&quot;applyTimeSettings()&quot; class=&quot;py-3 px-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold transition duration-150 shadow-lg shadow-indigo-500/50&quot;&gt;
+                    Set Time
+                &lt;/button&gt;
+                &lt;button onclick=&quot;hideSetTimeModal()&quot; class=&quot;py-3 px-8 rounded-full bg-gray-500 hover:bg-gray-600 text-white font-bold transition duration-150 shadow-lg shadow-gray-500/50&quot;&gt;
+                    Cancel
+                &lt;/button&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;script&gt;
+        // --- Global State &amp; Constants ---
+        const DEFAULT_MAX_SECONDS = 0;
+        const LOCAL_STORAGE_KEY = 'geeVitalityTimers'; // Key used for browser's local storage
+        
+        const START_COLOR_CLASSES = 'bg-green-600 hover:bg-green-700 shadow-green-500/50';
+        const STOP_COLOR_CLASSES = 'bg-red-600 hover:bg-red-700 shadow-red-500/50';
+
+        let timerCounter = 0; 
+        let wakeLock = null;
+        let synth = null;
+        let isToneInitialized = false;
+        let currentEditingChatId = null;
+        
+        // Stores state dynamically: {'timer-1': {seconds: 0, maxSeconds: 120, ...}}
+        let chatStates = {}; 
+        
+        // Count-Up Mode Default Color
+        const COLOR_COUNTUP = '#4f46e5'; // Tailwind indigo-600
+
+        // --- Persistence (LocalStorage) Functions ---
+
+        /**
+         * Saves the current application state (chatStates, timerCounter) to localStorage.
+         */
+        function saveStateToLocalStorage() {
+            try {
+                const stateToSave = {};
+                for (const id in chatStates) {
+                    const state = chatStates[id];
+                    
+                    // Save only the essential data points. Do NOT save intervalId.
+                    stateToSave[id] = {
+                        seconds: state.seconds, 
+                        maxSeconds: state.maxSeconds, 
+                        alertTriggered: state.alertTriggered,
+                        isRunning: state.isRunning, 
+                    };
+                }
+                
+                const data = {
+                    chatStates: stateToSave,
+                    timerCounter: timerCounter
+                };
+                
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+            } catch (e) {
+                console.error(&quot;Error saving state to localStorage:&quot;, e);
+                // Cannot save state to localStorage (e.g., storage full or security error in iFrame)
+            }
+        }
+        
+        /**
+         * Loads the application state from localStorage.
+         */
+        function loadStateFromLocalStorage() {
+            const loadingMessage = document.getElementById('loading-message');
+            loadingMessage.textContent = 'Fetching saved clocks...';
+
+            try {
+                const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                let timersFound = false;
+
+                if (storedData) {
+                    const data = JSON.parse(storedData);
+                    chatStates = data.chatStates || {};
+                    timerCounter = data.timerCounter || 0;
+                    
+                    if (Object.keys(chatStates).length &gt; 0) {
+                        timersFound = true;
+                        
+                        for (const id in chatStates) {
+                            const state = chatStates[id];
+                            
+                            // Initialize runtime properties
+                            state.intervalId = null;
+                            state.isRunning = state.isRunning || false;
+                            
+                            const timerNum = parseInt(id.split('-')[1]);
+                            const timerHtml = createTimerHTML(id, timerNum, state);
+                            document.getElementById('timers-container').insertAdjacentHTML('beforeend', timerHtml);
+                            
+                            updateStartButtonVisuals(id, state.isRunning);
+                            
+                            if (state.isRunning) {
+                                // Restart running timers
+                                startTimer(id, false); 
+                            } else {
+                                updateDisplay(id);
+                            }
+                        }
+                    }
+                }
+                
+                if (!timersFound) {
+                    addTimer(false); 
+                }
+
+                const msg = document.getElementById('loading-message');
+                if(msg) msg.remove();
+                
+            } catch (e) {
+                console.error(&quot;Error loading state from localStorage:&quot;, e);
+                const msg = document.getElementById('loading-message');
+                if(msg) msg.textContent = 'Local storage load failed. Starting fresh clock.';
+                setTimeout(() =&gt; { 
+                    const msg = document.getElementById('loading-message');
+                    if(msg) msg.remove();
+                    addTimer(false); 
+                }, 1000);
+            }
+        }
+        
+        // --- App Initialization (Replaced Firebase) ---
+
+        /**
+         * Initializes the application by loading state and starting the device clock.
+         */
+        function initializeApp() {
+            loadStateFromLocalStorage(); 
+            requestWakeLock();
+            
+            // Start the device time clock update
+            setInterval(updateCurrentTime, 1000);
+            updateCurrentTime(); // Initial call
+        }
+
+        // --- UI Helper Functions ---
+
+        /**
+         * Updates the display of the device's current time and date.
+         */
+        function updateCurrentTime() {
+            const now = new Date();
+            const timeNumbersElement = document.getElementById('time-numbers');
+            const timePeriodElement = document.getElementById('time-period');
+            const dateElement = document.getElementById('current-date');
+            
+            if (timeNumbersElement &amp;&amp; timePeriodElement &amp;&amp; dateElement) {
+                
+                const timeOptions = { 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit', 
+                    hour12: true 
+                };
+                const formatter = new Intl.DateTimeFormat(undefined, timeOptions);
+                const parts = formatter.formatToParts(now);
+
+                let timeNumbers = '';
+                let timePeriod = '';
+                
+                for (const part of parts) {
+                    if (part.type === 'dayPeriod') {
+                        timePeriod = part.value;
+                    } else if (part.type !== 'literal' || part.value.trim() !== '') {
+                        timeNumbers += part.value;
+                    }
+                }
+
+                const dateString = now.toLocaleDateString(undefined, { 
+                    weekday: 'short', 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+
+                const tzOptions = { timeZoneName: 'short' };
+                const timezoneFull = now.toLocaleTimeString(undefined, tzOptions);
+                const timezoneMatch = timezoneFull.match(/\b([A-Z]{3,}|GMT[+-]\d+)\b/); 
+                const timezoneString = timezoneMatch ? timezoneMatch[1] : '';
+
+                const combinedDateString = `${dateString} | ${timezoneString}`.trim();
+
+                timeNumbersElement.textContent = timeNumbers.trim();
+                timePeriodElement.textContent = timePeriod;
+                dateElement.textContent = combinedDateString;
+            }
+        }
+
+        // --- Tone.js Audio Functions ---
+
+        function initTone() {
+            if (isToneInitialized) return;
+            try {
+                if (Tone.context.state !== 'running') {
+                    Tone.start();
+                }
+                synth = new Tone.Synth().toDestination(); 
+                isToneInitialized = true;
+                console.log(&quot;AudioContext initialized.&quot;);
+            } catch (e) {
+                console.error(&quot;Failed to initialize Tone.js/AudioContext:&quot;, e);
+            }
+        }
+
+        function playSoundAlert() {
+            if (synth) {
+                synth.triggerAttackRelease(&quot;C5&quot;, &quot;32n&quot;, Tone.now());
+                synth.triggerAttackRelease(&quot;G4&quot;, &quot;32n&quot;, Tone.now() + 0.1); 
+            }
+        }
+
+        // --- Utility Functions ---
+
+        function lerp(start, end, t) {
+            return start * (1 - t) + end * t;
+        }
+        
+        function hsl(h, s, l) {
+            return `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
+        }
+        
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock requested.');
+                    wakeLock.addEventListener('release', () =&gt; {
+                        console.log('Screen Wake Lock released.');
+                    });
+                } catch (err) {
+                    // FIX: Gracefully handle NotAllowedError which is common in secure iframe/embedded environments
+                    if (err.name === 'NotAllowedError') {
+                        console.warn(`Wake Lock restricted by policy: ${err.message}. Screen may still dim.`);
+                    } else {
+                        console.error(`Wake Lock failed: ${err.name}, ${err.message}`);
+                    }
+                }
+            } else {
+                console.log('Wake Lock API not supported.');
+            }
+        }
+
+        document.addEventListener('visibilitychange', async () =&gt; {
+            if (wakeLock !== null &amp;&amp; document.visibilityState === 'visible') {
+                await requestWakeLock();
+            }
+        });
+
+        function getDisplayTime(elapsedSeconds, maxSeconds) {
+            let totalSeconds = maxSeconds - elapsedSeconds;
+            const isNegative = totalSeconds &lt; 0;
+            const absSeconds = Math.abs(totalSeconds);
+
+            const h = String(Math.floor(absSeconds / 3600)).padStart(2, '0');
+            const m = String(Math.floor((absSeconds % 3600) / 60)).padStart(2, '0');
+            const s = String(absSeconds % 60).padStart(2, '0');
+
+            const timeString = `${h}:${m}:${s}`;
+            
+            // Adaptive display logic: remove hours if 0
+            const shouldShowHours = (maxSeconds &gt; 0 &amp;&amp; Math.floor(maxSeconds / 3600) &gt; 0) || (h !== '00');
+            
+            if (!shouldShowHours) {
+                 return isNegative ? `-${m}:${s}` : `${m}:${s}`;
+            }
+
+            return isNegative ? `-${timeString}` : timeString;
+        }
+
+
+        /**
+         * Updates the display, applies the alert style, and updates the progress bar.
+         */
+        function updateDisplay(chatId) {
+            const state = chatStates[chatId];
+            if (!state) return; 
+
+            const displayElement = document.getElementById(`display-${chatId}`);
+            const progressBar = document.getElementById(`progress-${chatId}`);
+            const cardElement = document.getElementById(`card-${chatId}`);
+            
+            const maxHold = state.maxSeconds; 
+
+            if (!displayElement || !progressBar || !cardElement) return;
+
+            displayElement.textContent = getDisplayTime(state.seconds, maxHold); 
+
+            // Set text color to white by default, allowing the alert-active class to override when running past limit.
+            displayElement.style.color = 'var(--text-color)'; 
+
+            // --- Progress Bar Width Logic ---
+            const percentage = maxHold &gt; 0 ? Math.min(100, (state.seconds / maxHold) * 100) : (state.seconds &gt; 0 ? 100 : 0);
+            progressBar.style.width = `${percentage}%`;
+
+            // --- Dynamic Color Logic (HSL) ---
+            
+            // Set transitions to ensure smooth color/border updates
+            const smoothTransition = 'background-color 1s ease-linear, border-color 1s ease-linear, color 1s ease-linear';
+            progressBar.style.transition = smoothTransition;
+            cardElement.style.transition = smoothTransition;
+            displayElement.style.transition = smoothTransition;
+
+            // 1. Countdown Mode (maxHold &gt; 0)
+            if (maxHold &gt; 0) {
+                if (state.seconds &gt;= maxHold) {
+                    // ALERT ZONE (Time Exceeded)
+                    const redColor = '#dc2626'; // Tailwind red-600
+
+                    progressBar.style.backgroundColor = redColor; 
+                    cardElement.style.borderColor = redColor; 
+                    
+                    if (state.isRunning) {
+                        if (!displayElement.classList.contains('alert-active')) {
+                            displayElement.classList.add('alert-active');
+                        }
+
+                        if (!state.alertTriggered) {
+                            playSoundAlert();
+                            state.alertTriggered = true; 
+                        }
+                    } else {
+                        // Display style when paused in the alert zone
+                        displayElement.classList.remove('alert-active');
+                        displayElement.style.backgroundColor = 'var(--display-bg)'; 
+                        displayElement.style.boxShadow = `0 0 10px ${redColor}`;
+                        // Text color is now handled by the default setting above (white)
+                    }
+
+                } else {
+                    // TRANSITION ZONE (Time Remaining)
+                    const t = state.seconds / maxHold; 
+
+                    const H_START = 120; // Green hue
+                    const H_END = 30;    // Orange hue
+                    
+                    const h = lerp(H_START, H_END, t);
+                    const currentColor = hsl(h, 90, 50); 
+                    
+                    progressBar.style.backgroundColor = currentColor;
+                    cardElement.style.borderColor = currentColor; 
+                    
+                    // Text color is now handled by the default setting above (white)
+                    
+                    // Reset alert/background styles
+                    displayElement.classList.remove('alert-active');
+                    displayElement.style.backgroundColor = 'var(--display-bg)'; 
+                    displayElement.style.boxShadow = ''; 
+                    
+                    state.alertTriggered = false; 
+                }
+
+            } else { 
+                // 2. Count-Up Mode (maxHold = 0)
+                progressBar.style.backgroundColor = COLOR_COUNTUP; 
+                cardElement.style.borderColor = COLOR_COUNTUP; 
+                state.alertTriggered = false; 
+                
+                // Reset alert/background styles
+                displayElement.classList.remove('alert-active');
+                displayElement.style.backgroundColor = 'var(--display-bg)'; 
+                displayElement.style.boxShadow = ''; 
+                
+                // Text color is now handled by the default setting above (white)
+            }
+        }
+        
+        /**
+         * Updates the visual state (color and text) of the square Start/Stop button.
+         */
+        function updateStartButtonVisuals(chatId, isRunning) {
+            const button = document.getElementById(`start-btn-${chatId}`);
+            if (!button) return;
+
+            // 1. Update Colors (Red for STOP, Green for START)
+            if (isRunning) {
+                // Change to STOP (Red)
+                button.classList.remove(...START_COLOR_CLASSES.split(' '));
+                button.classList.add(...STOP_COLOR_CLASSES.split(' '));
+            } else {
+                // Change to START (Green)
+                button.classList.remove(...STOP_COLOR_CLASSES.split(' '));
+                button.classList.add(...START_COLOR_CLASSES.split(' '));
+            }
+
+            // Ensure control-button class is always present
+            button.classList.add('control-button', 'shadow-lg', 'transform', 'hover:scale-105'); 
+
+            // 2. Update Text (All Caps)
+            if (isRunning) {
+                button.textContent = 'STOP';
+            } else {
+                button.textContent = 'START';
+            }
+        }
+
+        // --- Timer Control Functions ---
+
+        window.startTimer = function(chatId, saveState = true) {
+            initTone(); 
+            const state = chatStates[chatId];
+            if (!state) return;
+
+            if (state.isRunning) {
+                pauseTimer(chatId);
+            } else {
+                state.isRunning = true;
+                
+                // Clear any existing interval just in case
+                if (state.intervalId) { clearInterval(state.intervalId); } 
+                
+                state.intervalId = setInterval(() =&gt; {
+                    state.seconds++;
+                    updateDisplay(chatId);
+                }, 1000);
+                
+                if (saveState) {
+                    saveStateToLocalStorage();
+                }
+            }
+            
+            updateStartButtonVisuals(chatId, state.isRunning);
+        }
+
+        function pauseTimer(chatId) {
+            const state = chatStates[chatId];
+            if (state &amp;&amp; state.intervalId) {
+                clearInterval(state.intervalId);
+                state.intervalId = null;
+                state.isRunning = false;
+                updateDisplay(chatId); 
+                saveStateToLocalStorage(); 
+            }
+        }
+
+        window.resetTimer = function(chatId) {
+            pauseTimer(chatId);
+            const state = chatStates[chatId];
+            if (state) {
+                state.seconds = 0; 
+                state.alertTriggered = false; 
+                updateDisplay(chatId);
+                saveStateToLocalStorage();
+            }
+            
+            updateStartButtonVisuals(chatId, false); // Always set to START icon on reset
+        }
+        
+        window.removeTimer = function(chatId) {
+            pauseTimer(chatId);
+            const cardElement = document.getElementById(`card-${chatId}`);
+            if (cardElement) {
+                cardElement.remove();
+                delete chatStates[chatId];
+                saveStateToLocalStorage();
+            }
+            if (Object.keys(chatStates).length === 0) {
+                 addTimer(true);
+            }
+        }
+
+        // --- Modal Functions ---
+        
+        /**
+         * Shows the modal and pre-fills inputs based on the current timer's maxSeconds.
+         * The values are set to empty string if they are 0 (the user's request).
+         */
+        window.showSetTimeModal = function(chatId) {
+            const state = chatStates[chatId];
+            if (!state) return;
+
+            currentEditingChatId = chatId;
+            
+            const initialMaxSeconds = state.maxSeconds || DEFAULT_MAX_SECONDS;
+            
+            const hours = Math.floor(initialMaxSeconds / 3600);
+            const remainingSecondsAfterHours = initialMaxSeconds % 3600;
+            const minutes = Math.floor(remainingSecondsAfterHours / 60);
+            const seconds = remainingSecondsAfterHours % 60;
+
+            // If value is 0, set input value to empty string to hide the zero, otherwise show the number.
+            const hrInput = document.getElementById('modal-hr');
+            const minInput = document.getElementById('modal-min');
+            const secInput = document.getElementById('modal-sec');
+
+            hrInput.value = hours &gt; 0 ? hours : '';
+            minInput.value = minutes &gt; 0 ? minutes : '';
+            secInput.value = seconds &gt; 0 ? seconds : '';
+            
+            document.getElementById('setTimeModal').style.display = 'grid';
+            
+            // Wait for display change before applying transition class
+            setTimeout(() =&gt; {
+                document.getElementById('setTimeModal').classList.add('active');
+            }, 10);
+            
+            // Focus logic: Focus on the first element that is empty, or the first element otherwise
+            if (hours === 0) {
+                hrInput.focus();
+            } else if (minutes === 0) {
+                 minInput.focus();
+            } else {
+                 secInput.focus();
+            }
+        }
+
+        window.hideSetTimeModal = function() {
+            document.getElementById('setTimeModal').classList.remove('active');
+            setTimeout(() =&gt; {
+                document.getElementById('setTimeModal').style.display = 'none';
+                currentEditingChatId = null;
+            }, 200); // Match transition duration
+        }
+
+        /**
+         * Reads input from the modal, calculates total seconds, and applies it to the current timer.
+         */
+        window.applyTimeSettings = function() {
+            if (!currentEditingChatId) {
+                hideSetTimeModal();
+                return;
+            }
+
+            const state = chatStates[currentEditingChatId];
+            if (!state) {
+                hideSetTimeModal();
+                return;
+            }
+
+            // Use || '0' to ensure empty fields are treated as 0 for calculation
+            const hours = parseInt(document.getElementById('modal-hr').value || '0', 10);
+            const minutes = parseInt(document.getElementById('modal-min').value || '0', 10);
+            const seconds = parseInt(document.getElementById('modal-sec').value || '0', 10);
+
+            let totalSeconds = (Math.max(0, hours) * 3600) + 
+                             (Math.max(0, minutes) * 60) + 
+                             Math.max(0, seconds);
+                             
+            // If the timer was a countdown and the new time is shorter than elapsed time, reset seconds.
+            if (state.maxSeconds &gt; 0 &amp;&amp; totalSeconds &lt; state.seconds) {
+                 state.seconds = 0;
+            }
+
+            state.maxSeconds = totalSeconds;
+            
+            // If setting to 0, ensure we are in count-up mode and not triggering an alert state unnecessarily.
+            if (totalSeconds === 0) {
+                 state.alertTriggered = false;
+            }
+
+
+            updateDisplay(currentEditingChatId);
+            saveStateToLocalStorage();
+            
+            hideSetTimeModal();
+        }
+
+        /**
+         * Generates the HTML for a single timer card.
+         */
+        function createTimerHTML(id, timerNumber, state = chatStates[id]) {
+            const initialMaxSeconds = state.maxSeconds || DEFAULT_MAX_SECONDS;
+            const initialDisplayTime = getDisplayTime(state.seconds || 0, initialMaxSeconds);
+            
+            const buttonPlaceholderClass = state.isRunning ? 
+                STOP_COLOR_CLASSES : 
+                START_COLOR_CLASSES;
+
+
+            return `
+                &lt;div id=&quot;card-${id}&quot; class=&quot;relative p-5 rounded-xl shadow-2xl border-2 border-gray-700&quot; style=&quot;background-color: var(--card-bg);&quot;&gt;
+                    
+                    &lt;div class=&quot;w-full&quot;&gt; 
+                        &lt;div id=&quot;display-${id}&quot; 
+                            onclick=&quot;showSetTimeModal('${id}')&quot;
+                            class=&quot;timer-display py-6 rounded-lg shadow-inner overflow-hidden select-none&quot; 
+                            style=&quot;background-color: var(--display-bg); color: var(--text-color);&quot;&gt;
+                            ${initialDisplayTime}
+                        &lt;/div&gt;
+
+                        &lt;div class=&quot;h-2 rounded-full overflow-hidden mt-3&quot; style=&quot;background-color: var(--progress-bar-bg);&quot;&gt;
+                            &lt;div id=&quot;progress-${id}&quot; class=&quot;h-full transition-all duration-1000 ease-linear&quot; style=&quot;width: 0%;&quot;&gt;&lt;/div&gt;
+                        &lt;/div&gt;
+                    &lt;/div&gt;
+
+                    &lt;div class=&quot;pt-5 flex justify-between items-center&quot;&gt;
+                        
+                        &lt;button onclick=&quot;removeTimer('${id}')&quot; 
+                                class=&quot;p-2 text-sm rounded-lg text-gray-500 hover:text-red-500 transition transform hover:scale-105 flex items-center space-x-1&quot;&gt;
+                            &lt;svg class=&quot;w-6 h-6&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; viewBox=&quot;0 0 24 24&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot;&gt;&lt;path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;2&quot; d=&quot;M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16&quot;&gt;&lt;/path&gt;&lt;/svg&gt;
+                        &lt;/button&gt;
+
+                        &lt;div class=&quot;flex items-center gap-3&quot;&gt;
+                            
+                            &lt;button id=&quot;start-btn-${id}&quot; onclick=&quot;startTimer('${id}')&quot; 
+                                class=&quot;control-button text-white uppercase transition duration-150 shadow-lg transform hover:scale-105 ${buttonPlaceholderClass}&quot;&gt;
+                                &lt;/button&gt;
+
+                            &lt;button onclick=&quot;resetTimer('${id}')&quot; 
+                                class=&quot;control-button text-white uppercase transition duration-150 shadow-lg hover:shadow-gray-500/50 transform hover:scale-105&quot; 
+                                style=&quot;background-color: var(--reset-bg);&quot;&gt;
+                                RESET
+                            &lt;/button&gt;
+                        &lt;/div&gt;
+                    &lt;/div&gt;
+                &lt;/div&gt;
+            `;
+        }
+
+        /**
+         * Adds a new timer card to the UI and initializes its state.
+         */
+        window.addTimer = function(saveState = true) {
+            timerCounter++;
+            const newId = 'timer-' + timerCounter;
+            
+            chatStates[newId] = { 
+                seconds: 0, 
+                intervalId: null, 
+                isRunning: false, 
+                alertTriggered: false,
+                maxSeconds: DEFAULT_MAX_SECONDS,
+            };
+            
+            const timerHtml = createTimerHTML(newId, timerCounter);
+            const container = document.getElementById('timers-container');
+            container.insertAdjacentHTML('beforeend', timerHtml);
+            
+            updateStartButtonVisuals(newId, false);
+
+            if (saveState) {
+                saveStateToLocalStorage();
+            }
+
+            updateDisplay(newId);
+        }
+
+        // Initialize the app display when the page loads
+        document.addEventListener('DOMContentLoaded', () =&gt; {
+            initializeApp(); 
+        });
+    &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+</body>
+</html>
